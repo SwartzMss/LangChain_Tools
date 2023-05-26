@@ -1,7 +1,8 @@
+# -*- coding:utf-8 _*-
 import os
 import shutil
 import gradio as gr
-from clc.langchain_application import LangChainApplication
+from langchain_application import LangChainApplication
 
 
 # 修改成自己的配置！！！
@@ -10,36 +11,25 @@ class LangChainCFG:
     embedding_model_name = '..\\text2vec-large-chinese'  # 本地模型文件 or huggingface远程仓库 GanymedeNil/text2vec-large-chines
     vector_store_path = './cache'
     docs_path = './docs'
-    # kg_vector_stores=None
     patterns = ['模型问答', '知识库问答']
     n_gpus=1
-
 
 config = LangChainCFG()
 application = LangChainApplication(config)
 
-application.source_service.init_source_vector()
 
-def get_file_list():
-    if not os.path.exists("docs"):
-        return []
-    return [f for f in os.listdir("docs")]
+if not os.path.exists(config.docs_path):
+    os.mkdir(config.docs_path)
 
+file_list = [f for f in os.listdir("docs")]
 
-file_list = get_file_list()
-
+application.source_service.init_source_vector(file_list)
 
 def upload_file(file):
-    if not os.path.exists("docs"):
-        os.mkdir("docs")
     filename = os.path.basename(file.name)
     shutil.move(file.name, "docs/" + filename)
-    # file_list首位插入新上传的文件
     file_list.insert(0, filename)
     application.source_service.add_document("docs/" + filename)
-    return gr.Dropdown.update(choices=file_list, value=filename)
-
-
 
 def clear_session():
     return '', None
@@ -49,42 +39,32 @@ def predict(input,
             large_language_model,
             embedding_model,
             top_k,
-            use_web,
             use_pattern,
             history=None):
-    # print(large_language_model, embedding_model)
-    print(input)
     if history == None:
         history = []
 
-    if use_web == '使用':
-        web_content = application.source_service.search_web(query=input)
-    else:
-        web_content = ''
-    search_text = ''
+
     if use_pattern == '模型问答':
-        result = application.get_llm_answer(query=input, web_content=web_content)
+        result = application.get_llm_answer(query=input)
         history.append((input, result))
-        search_text += web_content
-        return '', history, history, search_text
+        return '', history, history, ''
 
     else:
+        search_text = '检查相关的文件如下：\n'
         resp = application.get_knowledge_based_answer(
             query=input,
             history_len=1,
             temperature=0.1,
             top_p=0.9,
             top_k=top_k,
-            web_content=web_content,
             chat_history=history
         )
         history.append((input, resp['result']))
-        for idx, source in enumerate(resp['source_documents'][:4]):
-            sep = f'----------【搜索结果{idx + 1}：】---------------\n'
-            search_text += f'{sep}\n{source.page_content}\n\n'
-        print(search_text)
-        search_text += "----------【网络检索内容】-----------\n"
-        search_text += web_content
+        print(enumerate(resp['source_documents']))
+        for idx, source in enumerate(resp['source_documents'][:top_k]):
+            filename = source.metadata["filename"]
+            search_text += f'{idx}. {filename}\n'
         return '', history, history, search_text
 
 with gr.Blocks() as demo:
@@ -111,15 +91,11 @@ with gr.Blocks() as demo:
 
             top_k = gr.Slider(1,
                               20,
-                              value=4,
+                              value=2,
                               step=1,
                               label="检索top-k文档",
                               interactive=True)
 
-            use_web = gr.Radio(["使用", "不使用"], label="web search",
-                               info="是否使用网络搜索，使用时确保网络通常",
-                               value="不使用"
-                               )
             use_pattern = gr.Radio(
                 [
                     '模型问答',
@@ -130,7 +106,8 @@ with gr.Blocks() as demo:
                 interactive=True)
 
 
-            file = gr.File(label="将文件上传到知识库库，内容要尽量匹配",
+            file = gr.File(label="将文件上传到知识库库，内容要尽量匹配\r\n" \
+                            "支持类型为 txt, md, docx, pdf",
                            visible=True,
                            file_types=['.txt', '.md', '.docx', '.pdf']
                            )
@@ -143,13 +120,8 @@ with gr.Blocks() as demo:
             with gr.Row():
                 clear_history = gr.Button("🧹 清除历史对话")
                 send = gr.Button("🚀 发送")
-            with gr.Row():
-                gr.Markdown("""提醒：<br>
-                                        [Chinese-LangChain](https://github.com/yanqiangmiffy/Chinese-LangChain) <br>
-                                        有任何使用问题[Github Issue区](https://github.com/yanqiangmiffy/Chinese-LangChain)进行反馈. <br>
-                                        """)
         with gr.Column(scale=2):
-            search = gr.Textbox(label='搜索结果')
+            search = gr.Textbox(label='知识库搜索结果')
 
         # ============= 触发动作=============
         file.upload(upload_file,
