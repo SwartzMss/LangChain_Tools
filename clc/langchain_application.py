@@ -77,12 +77,8 @@ class LangChainApplication(object):
         result = knowledge_chain({"query": query})
         return result
 
-    def get_llm_answer(self, query='', web_content=''):
-        if web_content:
-            prompt = f'基于网络检索内容：{web_content}，回答以下问题{query}'
-        else:
-            prompt = query
-        result = self.llm_service._call(prompt)
+    def get_llm_answer(self, query=''):
+        result = self.llm_service._call(use_web)
         return result
 
 

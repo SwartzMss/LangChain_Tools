@@ -1,24 +1,17 @@
 import os
 import shutil
-
-from app_modules.overwrites import postprocess
-from app_modules.presets import *
+import gradio as gr
 from clc.langchain_application import LangChainApplication
 
 
 # 修改成自己的配置！！！
 class LangChainCFG:
-    llm_model_name = 'THUDM/chatglm-6b-int4-qe'  # 本地模型文件 or huggingface远程仓库
-    embedding_model_name = 'GanymedeNil/text2vec-large-chinese'  # 检索模型文件 or huggingface远程仓库
+    llm_model_name = '..\\chatglm-6b-noint'  # 本地模型文件 or huggingface远程仓库 THUDM/chatglm-6b
+    embedding_model_name = '..\\text2vec-large-chinese'  # 本地模型文件 or huggingface远程仓库 GanymedeNil/text2vec-large-chines
     vector_store_path = './cache'
     docs_path = './docs'
-    kg_vector_stores = {
-        '中文维基百科': './cache/zh_wikipedia',
-        '大规模金融研报': './cache/financial_research_reports',
-        '初始化': './cache',
-    }  # 可以替换成自己的知识库，如果没有需要设置为None
     # kg_vector_stores=None
-    patterns = ['模型问答', '知识库问答']  #
+    patterns = ['模型问答', '知识库问答']
     n_gpus=1
 
 
@@ -46,15 +39,6 @@ def upload_file(file):
     application.source_service.add_document("docs/" + filename)
     return gr.Dropdown.update(choices=file_list, value=filename)
 
-
-def set_knowledge(kg_name, history):
-    try:
-        application.source_service.load_vector_store(config.kg_vector_stores[kg_name])
-        msg_status = f'{kg_name}知识库已成功加载'
-    except Exception as e:
-        print(e)
-        msg_status = f'{kg_name}知识库未成功加载'
-    return history + [[None, msg_status]]
 
 
 def clear_session():
@@ -103,11 +87,8 @@ def predict(input,
         search_text += web_content
         return '', history, history, search_text
 
-
-with open("assets/custom.css", "r", encoding="utf-8") as f:
-    customCSS = f.read()
-with gr.Blocks(css=customCSS, theme=small_and_beautiful_theme) as demo:
-    gr.Markdown("""<h1><center>Chinese-LangChain</center></h1>
+with gr.Blocks() as demo:
+    gr.Markdown("""<h1><center>LangChain Engine</center></h1>
         <center><font size=3>
         </center></font>
         """)
@@ -148,12 +129,6 @@ with gr.Blocks(css=customCSS, theme=small_and_beautiful_theme) as demo:
                 value='模型问答',
                 interactive=True)
 
-            kg_name = gr.Radio(list(config.kg_vector_stores.keys()),
-                               label="知识库",
-                               value=None,
-                               info="使用知识库问答，请加载知识库",
-                               interactive=True)
-            set_kg_btn = gr.Button("加载知识库")
 
             file = gr.File(label="将文件上传到知识库库，内容要尽量匹配",
                            visible=True,
@@ -180,12 +155,6 @@ with gr.Blocks(css=customCSS, theme=small_and_beautiful_theme) as demo:
         file.upload(upload_file,
                     inputs=file,
                     outputs=None)
-        set_kg_btn.click(
-            set_knowledge,
-            show_progress=True,
-            inputs=[kg_name, chatbot],
-            outputs=chatbot
-        )
         # 发送按钮 提交
         send.click(predict,
                    inputs=[
@@ -193,7 +162,6 @@ with gr.Blocks(css=customCSS, theme=small_and_beautiful_theme) as demo:
                        large_language_model,
                        embedding_model,
                        top_k,
-                       use_web,
                        use_pattern,
                        state
                    ],
@@ -212,7 +180,6 @@ with gr.Blocks(css=customCSS, theme=small_and_beautiful_theme) as demo:
                            large_language_model,
                            embedding_model,
                            top_k,
-                           use_web,
                            use_pattern,
                            state
                        ],
@@ -220,7 +187,7 @@ with gr.Blocks(css=customCSS, theme=small_and_beautiful_theme) as demo:
 
 demo.queue(concurrency_count=2).launch(
     server_name='0.0.0.0',
-    server_port=8888,
+    #server_port=8888,
     share=False,
     show_error=True,
     debug=True,
